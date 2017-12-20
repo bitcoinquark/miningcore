@@ -88,7 +88,8 @@ namespace MiningCore.Blockchain.Bitcoin
             {CoinType.VTC, "VfCAvPVrksYvwcpU7E44e51HxfvVhcxMXf"},
             {CoinType.ZEC, "t1YHZHz2DGVMJiggD2P4fBQ2TAPgtLSUwZ7"},
             {CoinType.BTG, "GQb77ZuMCyJGZFyxpzqNfm7GB1rQreP4n6"},
-            {CoinType.XMR, "475YVJbPHPedudkhrcNp1wDcLMTGYusGPF5fqE7XjnragVLPdqbCHBdZg3dF4dN9hXMjjvGbykS6a77dTAQvGrpiQqHp2eH"}
+            {CoinType.XMR, "475YVJbPHPedudkhrcNp1wDcLMTGYusGPF5fqE7XjnragVLPdqbCHBdZg3dF4dN9hXMjjvGbykS6a77dTAQvGrpiQqHp2eH"},
+            {CoinType.BTQ, "1DFaGdARErmsMTh4W6g53nFMVd6Kef7vi9" }
         };
     }
 
