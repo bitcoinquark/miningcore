@@ -44,6 +44,7 @@ using MiningCore.Time;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Module = Autofac.Module;
+using MiningCore.Blockchain.BitcoinQuark;
 
 namespace MiningCore
 {
@@ -139,6 +140,12 @@ namespace MiningCore
             // Bitcoin Gold
 
             builder.RegisterType<BitcoinGoldJobManager>()
+                .AsSelf();
+
+            //////////////////////
+            // Bitcoin Quark
+
+            builder.RegisterType<BitcoinQuarkJobManager>()
                 .AsSelf();
 
             base.Load(builder);
