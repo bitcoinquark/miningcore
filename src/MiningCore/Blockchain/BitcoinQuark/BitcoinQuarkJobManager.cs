@@ -30,8 +30,13 @@ namespace MiningCore.Blockchain.BitcoinQuark
 
         protected override async Task<DaemonResponse<ZCashBlockTemplate>> GetBlockTemplateAsync()
         {
+            var subsidyResponse = await daemon.ExecuteCmdAnyAsync<ZCashBlockSubsidy>(BitcoinCommands.GetBlockSubsidy);
+
             var result = await daemon.ExecuteCmdAnyAsync<ZCashBlockTemplate>(
                 BitcoinCommands.GetBlockTemplate, getBlockTemplateParams);
+
+            if (subsidyResponse.Error == null && result.Error == null && result.Response != null)
+                result.Response.Subsidy = subsidyResponse.Response;
 
             return result;
         }
