@@ -6,6 +6,10 @@ using MiningCore.Blockchain.ZCash.DaemonResponses;
 using MiningCore.DaemonInterface;
 using MiningCore.Notifications;
 using MiningCore.Time;
+using MiningCore.Contracts;
+using System;
+using MiningCore.Blockchain.Bitcoin.DaemonResponses;
+using NBitcoin;
 
 namespace MiningCore.Blockchain.BitcoinQuark
 {
@@ -28,6 +32,16 @@ namespace MiningCore.Blockchain.BitcoinQuark
 
         #region Overrides of ZCashJobManager<BitcoinQuarkJob>
 
+        public override async Task<bool> ValidateAddressAsync(string address)
+        {
+            Contract.Requires<ArgumentException>(!string.IsNullOrEmpty(address), $"{nameof(address)} must not be empty");
+
+            var result = await daemon.ExecuteCmdAnyAsync<ValidateAddressResponse>(
+                BitcoinCommands.ValidateAddress, new[] { address });
+
+            return result.Response != null && result.Response.IsValid;
+        }
+
         protected override async Task<DaemonResponse<ZCashBlockTemplate>> GetBlockTemplateAsync()
         {
             var result = await daemon.ExecuteCmdAnyAsync<ZCashBlockTemplate>(
@@ -45,6 +59,12 @@ namespace MiningCore.Blockchain.BitcoinQuark
 
             return result;
         }
+
+        protected override IDestination AddressToDestination(string address)
+        {
+            return BitcoinUtils.AddressToDestination(address);
+        }
+
 
         #endregion
     }

@@ -98,9 +98,8 @@ namespace MiningCore.Blockchain.BitcoinQuark
                 .HexToByteArray()
                 .ReverseArray()
                 .ToHexString();
-
-            // BTQ blockReward and rewardFees
-            blockReward = blockTemplate.Subsidy.Miner;// * BitcoinConstants.;
+            
+            blockReward = blockTemplate.Subsidy.Miner;
             rewardFees = blockTemplate.Transactions.Sum(x => x.Fee);
 
             BuildCoinbase();
