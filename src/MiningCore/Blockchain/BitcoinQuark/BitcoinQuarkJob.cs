@@ -43,7 +43,7 @@ namespace MiningCore.Blockchain.BitcoinQuark
         protected virtual Script GetPremineAddressScript(uint height)
         {
             bool BTQPremineEnforceWhitelist = true;
-            uint BTQHeight = 1258721;
+            uint BTQHeight = 1259790;
             uint BTQPremineWindow = 100;
             uint nPowTargetSpacing = 10 * 60;
 
