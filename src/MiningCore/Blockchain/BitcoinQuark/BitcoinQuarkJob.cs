@@ -47,6 +47,11 @@ namespace MiningCore.Blockchain.BitcoinQuark
             uint BTQPremineWindow = 100;
             uint nPowTargetSpacing = 10 * 60;
 
+            if(this.networkType != BitcoinNetworkType.Test)
+            {
+                return null;
+            }
+
             if (!BTQPremineEnforceWhitelist)
             {
                 return null;
