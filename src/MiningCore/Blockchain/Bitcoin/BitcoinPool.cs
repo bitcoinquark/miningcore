@@ -31,9 +31,10 @@ using Newtonsoft.Json;
 namespace MiningCore.Blockchain.Bitcoin
 {
     [CoinMetadata(
-        CoinType.BTC, CoinType.BCC, CoinType.NMC, CoinType.PPC,
+        CoinType.BTC, CoinType.BCH, CoinType.NMC, CoinType.PPC,
         CoinType.LTC, CoinType.DOGE, CoinType.DGB, CoinType.VIA,
-        CoinType.GRS, CoinType.MONA, CoinType.VTC, CoinType.GLT)]
+        CoinType.GRS, CoinType.MONA, CoinType.VTC, CoinType.GLT,
+        CoinType.MOON, CoinType.XVG, CoinType.GBX, CoinType.CRC)]
     public class BitcoinPool : BitcoinPoolBase<BitcoinJob<BlockTemplate>, BlockTemplate>
     {
         public BitcoinPool(IComponentContext ctx,

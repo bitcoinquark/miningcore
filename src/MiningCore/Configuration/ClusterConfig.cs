@@ -28,7 +28,7 @@ namespace MiningCore.Configuration
     {
         // ReSharper disable InconsistentNaming
         BTC = 1, // Bitcoin
-        BCC, // Bitcoin Cash
+        BCH, // Bitcoin Cash
         LTC, // Litecoin
         DOGE, // Dogecoin,
         XMR, // Monero
@@ -38,6 +38,8 @@ namespace MiningCore.Configuration
         VIA, // Viacoin
         PPC, // Peercoin
         ZEC, // ZCash
+        ZCL, // ZClassic
+        ZEN, // Zencash
         ETH, // Ethereum
         ETC, // Ethereum Classic
         EXP, // Expanse
@@ -46,11 +48,14 @@ namespace MiningCore.Configuration
         VTC, // Vertcoin
         BTG, // Bitcoin Gold
         GLT, // Globaltoken
-        ELLA, //Ellaism
+        ELLA, // Ellaism
         AEON, // AEON
-        STAK, //Straks
-        BTQ // BitcoinQuark
-    }
+        STAK, // Straks
+        ETN, // Electroneum
+        MOON, // MoonCoin
+        XVG,  // Verge
+        GBX,  // GoByte
+        CRC,  // CrowdCoin   }
 
     public class CoinConfig
     {

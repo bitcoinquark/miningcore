@@ -35,7 +35,6 @@ using MiningCore.Blockchain.Straks.DaemonResponses;
 using MiningCore.Blockchain.ZCash;
 using MiningCore.Blockchain.ZCash.DaemonResponses;
 using MiningCore.Configuration;
-using MiningCore.JsonRpc;
 using MiningCore.Mining;
 using MiningCore.Notifications;
 using MiningCore.Payments;
@@ -84,6 +83,9 @@ namespace MiningCore
             builder.RegisterType<ApiServer>()
                 .SingleInstance();
 
+            builder.RegisterType<StatsRecorder>()
+                .AsSelf();
+
             builder.RegisterType<NotificationService>()
                 .SingleInstance();
 
@@ -99,7 +101,7 @@ namespace MiningCore
             //////////////////////
             // Payment Schemes
 
-            builder.RegisterType<PayPerLastNShares>()
+            builder.RegisterType<PPLNS>()
                 .Keyed<IPayoutScheme>(PayoutScheme.PPLNS)
                 .SingleInstance();
 

@@ -44,10 +44,11 @@ using Contract = MiningCore.Contracts.Contract;
 namespace MiningCore.Blockchain.Bitcoin
 {
     [CoinMetadata(
-        CoinType.BTC, CoinType.BCC, CoinType.NMC, CoinType.PPC,
+        CoinType.BTC, CoinType.BCH, CoinType.NMC, CoinType.PPC,
         CoinType.LTC, CoinType.DOGE, CoinType.DGB, CoinType.VIA,
-        CoinType.GRS, CoinType.MONA, CoinType.VTC,
-        CoinType.BTG, CoinType.GLT, CoinType.STAK, CoinType.BTQ)]
+        CoinType.GRS, CoinType.MONA, CoinType.VTC, CoinType.BTG,
+        CoinType.GLT, CoinType.STAK, CoinType.BTQ, CoinType.MOON, 
+        CoinType.XVG, CoinType.GBX, CoinType.CRC)]
     public class BitcoinPayoutHandler : PayoutHandlerBase,
         IPayoutHandler
     {
@@ -73,7 +74,7 @@ namespace MiningCore.Blockchain.Bitcoin
         protected readonly IComponentContext ctx;
         protected DaemonClient daemon;
         protected BitcoinCoinProperties coinProperties;
-        protected BitcoinPoolConfigExtra extraPoolConfig;
+        protected BitcoinDaemonEndpointConfigExtra extraPoolConfig;
         protected BitcoinPoolPaymentProcessingConfigExtra extraPoolPaymentProcessingConfig;
 
         protected override string LogCategory => "Bitcoin Payout Handler";
@@ -87,7 +88,7 @@ namespace MiningCore.Blockchain.Bitcoin
             this.poolConfig = poolConfig;
             this.clusterConfig = clusterConfig;
 
-            extraPoolConfig = poolConfig.Extra.SafeExtensionDataAs<BitcoinPoolConfigExtra>();
+            extraPoolConfig = poolConfig.Extra.SafeExtensionDataAs<BitcoinDaemonEndpointConfigExtra>();
             extraPoolPaymentProcessingConfig = poolConfig.PaymentProcessing.Extra.SafeExtensionDataAs<BitcoinPoolPaymentProcessingConfigExtra>();
             coinProperties = BitcoinProperties.GetCoinProperties(poolConfig.Coin.Type, poolConfig.Coin.Algorithm);
 
@@ -178,6 +179,7 @@ namespace MiningCore.Blockchain.Bitcoin
 	                            logger.Info(() => $"[{LogCategory}] Block {block.BlockHeight} classified as orphaned. Category: {transactionInfo.Details[0].Category}");
 
 								block.Status = BlockStatus.Orphaned;
+                                block.Reward = 0;
                                 result.Add(block);
                                 break;
                         }
@@ -241,7 +243,7 @@ namespace MiningCore.Blockchain.Bitcoin
 
                 args = new object[]
                 {
-                    string.Empty,           // default account 
+                    string.Empty,           // default account
                     amounts,                // addresses and associated amounts
                     1,                      // only spend funds covered by this many confirmations
                     comment,                // tx comment
@@ -253,7 +255,7 @@ namespace MiningCore.Blockchain.Bitcoin
             {
                 args = new object[]
                 {
-                    string.Empty,           // default account 
+                    string.Empty,           // default account
                     amounts,                // addresses and associated amounts
                 };
             }

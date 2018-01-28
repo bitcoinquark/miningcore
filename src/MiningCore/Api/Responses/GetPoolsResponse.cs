@@ -30,6 +30,7 @@ namespace MiningCore.Api.Responses
     public class ApiCoinConfig
     {
         public string Type { get; set; }
+        public string Algorithm { get; set; }
     }
 
     public class ApiPoolPaymentProcessingConfig
@@ -61,8 +62,9 @@ namespace MiningCore.Api.Responses
 
         // Stats
         public PoolStats PoolStats { get; set; }
-
         public BlockchainStats NetworkStats { get; set; }
+        public MinerPerformanceStats[] TopMiners { get; set; }
+        public decimal TotalPaid { get; set; }
     }
 
     public class GetPoolsResponse

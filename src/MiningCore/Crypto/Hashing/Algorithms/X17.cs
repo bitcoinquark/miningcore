@@ -18,16 +18,28 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-using System;
+using MiningCore.Contracts;
+using MiningCore.Native;
 
-namespace MiningCore.Persistence.Model
+namespace MiningCore.Crypto.Hashing.Algorithms
 {
-    public class MinerStats
+    public unsafe class X17 : IHashAlgorithm
     {
-        public ulong PendingShares { get; set; }
-        public decimal PendingBalance { get; set; }
-        public decimal TotalPaid { get; set; }
-        public Payment LastPayment { get; set; }
-        public MinerHashrateSample[] Hashrate { get; set; }
+        public byte[] Digest(byte[] data, params object[] extra)
+        {
+            Contract.RequiresNonNull(data, nameof(data));
+
+            var result = new byte[32];
+
+            fixed(byte* input = data)
+            {
+                fixed(byte* output = result)
+                {
+                    LibMultihash.x17(input, output, (uint) data.Length);
+                }
+            }
+
+            return result;
+        }
     }
 }

@@ -81,7 +81,7 @@ namespace MiningCore.Mining
                 .Synchronize();
         }
 
-        protected readonly PoolStats poolStats = new PoolStats();
+        protected PoolStats poolStats = new PoolStats();
         protected readonly JsonSerializerSettings serializerSettings;
         protected readonly NotificationService notificationService;
         protected readonly IConnectionFactory cf;
@@ -104,12 +104,6 @@ namespace MiningCore.Mining
 
         protected override void OnConnect(StratumClient client)
         {
-            // update stats
-            lock(clients)
-            {
-                poolStats.ConnectedMiners = clients.Count;
-            }
-
             // client setup
             var context = CreateClientContext();
 
@@ -128,15 +122,6 @@ namespace MiningCore.Mining
 
             // expect miner to establish communication within a certain time
             EnsureNoZombieClient(client);
-        }
-
-        protected override void OnDisconnect(string subscriptionId)
-        {
-            // update stats
-            lock(clients)
-            {
-                poolStats.ConnectedMiners = clients.Count;
-            }
         }
 
         private void EnsureNoZombieClient(StratumClient client)
@@ -162,6 +147,9 @@ namespace MiningCore.Mining
 				{
 					ContractResolver = new CamelCasePropertyNamesContractResolver()
 				};
+
+			    var currentHeight = 0L;
+			    var lastBlockTime = clock.Now;
 
 				while(true)
 				{
@@ -211,8 +199,22 @@ namespace MiningCore.Mining
 									continue;
 								}
 
-								// fill in the blacks
-								share.PoolId = poolConfig.Id;
+							    // update network stats
+							    blockchainStats.BlockHeight = share.BlockHeight;
+							    blockchainStats.NetworkDifficulty = share.NetworkDifficulty;
+
+							    if (currentHeight != share.BlockHeight)
+							    {
+							        blockchainStats.LastNetworkBlockTime = clock.Now;
+							        currentHeight = share.BlockHeight;
+							        lastBlockTime = clock.Now;
+                                }
+
+                                else
+							        blockchainStats.LastNetworkBlockTime = lastBlockTime;
+
+                                // fill in the blacks
+                                share.PoolId = poolConfig.Id;
 								share.Created = clock.Now;
 
 								// re-publish
@@ -310,42 +312,10 @@ namespace MiningCore.Mining
             }
         }
 
-        protected virtual void SetupStats()
+        protected virtual void InitStats()
         {
             LoadStats();
-
-            // Periodically persist pool- and blockchain-stats to persistent storage
-            disposables.Add(Observable.Interval(TimeSpan.FromSeconds(60))
-                .Select(_ => Observable.FromAsync(async () =>
-                {
-                    try
-                    {
-                        await UpdateBlockChainStatsAsync();
-                    }
-                    catch(Exception)
-                    {
-                        // ignored
-                    }
-                }))
-                .Concat()
-                .Subscribe(_ => PersistStats()));
-
-            // For external stratums, miner counts are derived from submitted shares
-            if (poolConfig.ExternalStratum)
-            {
-                disposables.Add(Shares
-                    .Buffer(TimeSpan.FromMinutes(1))
-                    .Do(shares =>
-                    {
-                        var sharesByMiner = shares.GroupBy(x => x.Share.Miner).ToArray();
-                        poolStats.ConnectedMiners = sharesByMiner.Length;
-                    })
-                    .Subscribe());
-
-            }
         }
-
-        protected abstract Task UpdateBlockChainStatsAsync();
 
         private void LoadStats()
         {
@@ -357,36 +327,14 @@ namespace MiningCore.Mining
 
                 if (stats != null)
                 {
-                    poolStats.ConnectedMiners = stats.ConnectedMiners;
-                    poolStats.PoolHashRate = (ulong) stats.PoolHashRate;
+                    poolStats = mapper.Map<PoolStats>(stats);
+                    blockchainStats = mapper.Map<BlockchainStats>(stats);
                 }
             }
 
             catch (Exception ex)
             {
                 logger.Warn(ex, () => $"[{LogCat}] Unable to load pool stats");
-            }
-        }
-
-        private void PersistStats()
-        {
-            try
-            {
-                logger.Debug(() => $"[{LogCat}] Persisting pool stats");
-
-                cf.RunTx((con, tx) =>
-                {
-                    var mapped = mapper.Map<Persistence.Model.PoolStats>(poolStats);
-                    mapped.PoolId = poolConfig.Id;
-                    mapped.Created = clock.Now;
-
-                    statsRepo.InsertPoolStats(con, tx, mapped);
-                });
-            }
-
-            catch(Exception ex)
-            {
-                logger.Error(ex, () => $"[{LogCat}] Unable to persist pool stats");
             }
         }
 
@@ -444,55 +392,6 @@ Pool Fee:               {poolConfig.RewardRecipients.Sum(x => x.Percentage)}%
             logger.Info(() => msg);
         }
 
-        protected abstract ulong HashrateFromShares(IEnumerable<ClientShare> shares, int interval);
-
-        protected virtual void UpdateMinerHashrates(IList<ClientShare> shares, int interval)
-        {
-            try
-            {
-                var sharesByMiner = shares.GroupBy(x => x.Share.Miner).ToArray();
-
-                foreach (var minerShares in sharesByMiner)
-                {
-                    // Total hashrate
-                    var miner = minerShares.Key;
-                    var hashRate = HashrateFromShares(minerShares, interval);
-
-                    var sample = new MinerHashrateSample
-                    {
-                        PoolId = poolConfig.Id,
-                        Miner = miner,
-                        Hashrate = hashRate,
-                        Created = clock.Now
-                    };
-
-                    // Per worker hashrates
-                    var sharesPerWorker = minerShares
-                        .GroupBy(x => x.Share.Worker)
-                        .Where(x => !string.IsNullOrEmpty(x.Key));
-
-                    foreach(var workerShares in sharesPerWorker)
-                    {
-                        var worker = workerShares.Key;
-                        hashRate = HashrateFromShares(workerShares, interval);
-
-                        if (sample.WorkerHashrates == null)
-                            sample.WorkerHashrates = new Dictionary<string, ulong>();
-
-                        sample.WorkerHashrates[worker] = hashRate;
-                    }
-
-                    // Persist
-                    cf.RunTx((con, tx) => { statsRepo.RecordMinerHashrateSample(con, tx, sample); });
-                }
-            }
-
-            catch(Exception ex)
-            {
-                logger.Error(ex);
-            }
-        }
-
         #region API-Surface
 
         public IObservable<ClientShare> Shares { get; }
@@ -510,6 +409,8 @@ Pool Fee:               {poolConfig.RewardRecipients.Sum(x => x.Percentage)}%
             this.clusterConfig = clusterConfig;
         }
 
+        public abstract double HashrateFromShares(double shares, double interval);
+
         public virtual async Task StartAsync()
         {
             Contract.RequiresNonNull(poolConfig, nameof(poolConfig));
@@ -520,8 +421,9 @@ Pool Fee:               {poolConfig.RewardRecipients.Sum(x => x.Percentage)}%
             {
 	            SetupBanning(clusterConfig);
 	            await SetupJobManager();
+                InitStats();
 
-	            if (!poolConfig.ExternalStratum)
+                if (!poolConfig.ExternalStratum)
 	            {
 		            var ipEndpoints = poolConfig.Ports.Keys
 			            .Select(port => PoolEndpoint2IPEndpoint(port, poolConfig.Ports[port]))
@@ -539,9 +441,6 @@ Pool Fee:               {poolConfig.RewardRecipients.Sum(x => x.Percentage)}%
 
 					StartExternalStratumPublisherListener();
 	            }
-
-	            SetupStats();
-                await UpdateBlockChainStatsAsync();
 
                 logger.Info(() => $"[{LogCat}] Online");
                 OutputPoolInfo();

@@ -20,7 +20,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Reactive;
@@ -31,7 +30,6 @@ using MiningCore.Blockchain.Bitcoin;
 using MiningCore.Blockchain.ZCash.DaemonResponses;
 using MiningCore.Extensions;
 using MiningCore.JsonRpc;
-using MiningCore.Mining;
 using MiningCore.Notifications;
 using MiningCore.Persistence;
 using MiningCore.Persistence.Repositories;
@@ -213,12 +211,11 @@ namespace MiningCore.Blockchain.ZCash
             });
         }
 
-        protected override ulong HashrateFromShares(IEnumerable<ClientShare> shares, int interval)
+        public override double HashrateFromShares(double shares, double interval)
         {
-            var sum = shares.Sum(share => Math.Max(0.00000001, share.Share.Difficulty * manager.ShareMultiplier));
             var multiplier = BitcoinConstants.Pow2x32 / manager.ShareMultiplier;
-            var result = Math.Ceiling(((sum * multiplier / interval) / 1000000) * 2);
-            return (ulong)result;
+            var result = shares * multiplier / interval / 1000000 * 2;
+            return result;
         }
 
         protected override void OnVarDiffUpdate(StratumClient client, double newDiff)

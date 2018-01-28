@@ -20,6 +20,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -35,14 +36,12 @@ using Microsoft.Extensions.Primitives;
 using MiningCore.Api.Extensions;
 using MiningCore.Api.Responses;
 using MiningCore.Blockchain;
-using MiningCore.Buffers;
 using MiningCore.Configuration;
 using MiningCore.Extensions;
 using MiningCore.Mining;
 using MiningCore.Persistence;
 using MiningCore.Persistence.Model;
 using MiningCore.Persistence.Repositories;
-using MiningCore.Stratum;
 using MiningCore.Time;
 using MiningCore.Util;
 using Newtonsoft.Json;
@@ -78,12 +77,15 @@ namespace MiningCore.Api
 
             requestMap = new Dictionary<Regex, Func<HttpContext, Match, Task>>
             {
-                { new Regex("^/api/pools$", RegexOptions.Compiled), HandleGetPoolsAsync },
-                { new Regex("^/api/pools/(?<poolId>[^/]+)$", RegexOptions.Compiled), HandleGetPoolAsync },
-                { new Regex("^/api/pools/(?<poolId>[^/]+)/stats/hourly$", RegexOptions.Compiled), HandleGetPoolStatsAsync },
-                { new Regex("^/api/pools/(?<poolId>[^/]+)/blocks$", RegexOptions.Compiled), HandleGetBlocksPagedAsync },
-                { new Regex("^/api/pools/(?<poolId>[^/]+)/payments$", RegexOptions.Compiled), HandleGetPaymentsPagedAsync },
-                { new Regex("^/api/pools/(?<poolId>[^/]+)/miner/(?<address>[^/]+)/stats$", RegexOptions.Compiled), HandleGetMinerStatsAsync },
+                { new Regex("^/api/pools$", RegexOptions.Compiled), GetPoolInfosAsync },
+                { new Regex("^/api/pools/(?<poolId>[^/]+)/performance$", RegexOptions.Compiled), GetPoolPerformanceAsync },
+                { new Regex("^/api/pools/(?<poolId>[^/]+)/miners$", RegexOptions.Compiled), PagePoolMinersAsync },
+                { new Regex("^/api/pools/(?<poolId>[^/]+)/blocks$", RegexOptions.Compiled), PagePoolBlocksPagedAsync },
+                { new Regex("^/api/pools/(?<poolId>[^/]+)/payments$", RegexOptions.Compiled), PagePoolPaymentsAsync },
+                { new Regex("^/api/pools/(?<poolId>[^/]+)$", RegexOptions.Compiled), GetPoolInfoAsync },
+                { new Regex("^/api/pools/(?<poolId>[^/]+)/miners/(?<address>[^/]+)/payments$", RegexOptions.Compiled), PageMinerPaymentsAsync },
+                { new Regex("^/api/pools/(?<poolId>[^/]+)/miners/(?<address>[^/]+)/performance$", RegexOptions.Compiled), GetMinerPerformanceAsync },
+                { new Regex("^/api/pools/(?<poolId>[^/]+)/miners/(?<address>[^/]+)$", RegexOptions.Compiled), GetMinerInfoAsync },
 
                 // admin api
                 { new Regex("^/api/admin/forcegc$", RegexOptions.Compiled), HandleForceGcAsync },
@@ -98,9 +100,10 @@ namespace MiningCore.Api
         private readonly IMapper mapper;
         private readonly IMasterClock clock;
 
-        private readonly List<IMiningPool> pools = new List<IMiningPool>();
+        private ClusterConfig clusterConfig;
         private IWebHost webHost;
         private static readonly ILogger logger = LogManager.GetCurrentClassLogger();
+        private static readonly Encoding encoding = new UTF8Encoding(false);
 
         private static readonly JsonSerializer serializer = new JsonSerializer
         {
@@ -110,6 +113,22 @@ namespace MiningCore.Api
         };
 
         private readonly Dictionary<Regex, Func<HttpContext, Match, Task>> requestMap;
+
+        private PoolConfig GetPool(HttpContext context, Match m)
+        {
+            var poolId = m.Groups["poolId"]?.Value;
+
+            if (!string.IsNullOrEmpty(poolId))
+            {
+                var pool = clusterConfig.Pools.FirstOrDefault(x => x.Id == poolId && x.Enabled);
+
+                if (pool != null)
+                    return pool;
+            }
+
+            context.Response.StatusCode = 404;
+            return null;
+        }
 
         private async Task SendJson(HttpContext context, object response)
         {
@@ -121,7 +140,7 @@ namespace MiningCore.Api
 
             using (var stream = context.Response.Body)
             {
-                using (var writer = new StreamWriter(stream, Encoding.UTF8))
+                using (var writer = new StreamWriter(stream, encoding))
                 {
                     serializer.Serialize(writer, response);
 
@@ -162,55 +181,101 @@ namespace MiningCore.Api
             }
         }
 
-        private IMiningPool GetPool(HttpContext context, Match m)
+        private WorkerPerformanceStatsContainer[] GetMinerPerformanceInternal(string mode, PoolConfig pool, string address)
         {
-            var poolId = m.Groups["poolId"]?.Value;
+            Persistence.Model.Projections.WorkerPerformanceStatsContainer[] stats;
 
-            if (!string.IsNullOrEmpty(poolId))
+            if (mode == "day" || mode != "month")
             {
-                lock(pools)
-                {
-                    var pool = pools.FirstOrDefault(x => x.Config.Id == poolId);
- 
-                    if (pool != null)
-                        return pool;
-                }
+                // set range
+#if DEBUG
+                var end = new DateTime(2018, 1, 7, 16, 0, 0);
+#else
+                var end = clock.Now; // new DateTime(2018, 1, 7, 16, 0, 0);
+#endif
+                var start = end.AddDays(-1);
+
+                stats = cf.Run(con => statsRepo.GetMinerPerformanceBetweenHourly(
+                    con, pool.Id, address, start, end));
             }
 
-            context.Response.StatusCode = 404;
-            return null;
+            else
+            {
+                // set range
+                var end = clock.Now;
+                var start = end.AddMonths(-1);
+
+                stats = cf.Run(con => statsRepo.GetMinerPerformanceBetweenDaily(
+                    con, pool.Id, address, start, end));
+            }
+
+            // map
+            var result = mapper.Map<WorkerPerformanceStatsContainer[]>(stats);
+            return result;
         }
 
-        private async Task HandleGetPoolsAsync(HttpContext context, Match m)
+        private async Task GetPoolInfosAsync(HttpContext context, Match m)
         {
-            GetPoolsResponse response;
-
-            lock(pools)
+            var response = new GetPoolsResponse
             {
-                response = new GetPoolsResponse
+                Pools = clusterConfig.Pools.Where(x=> x.Enabled).Select(config =>
                 {
-                    Pools = pools.Select(pool => pool.ToPoolInfo(mapper)).ToArray()
-                };
-            }
+                    // load stats
+                    var stats = cf.Run(con => statsRepo.GetLastPoolStats(con, config.Id));
+
+                    // map
+                    var result = config.ToPoolInfo(mapper, stats);
+
+                    // enrich
+                    result.TotalPaid = cf.Run(con => statsRepo.GetTotalPoolPayments(con, config.Id));
+#if DEBUG
+                    var from = new DateTime(2018, 1, 6, 16, 0, 0);
+#else
+                    var from = clock.Now.AddDays(-1);
+#endif
+                    result.TopMiners = cf.Run(con => statsRepo.PagePoolMinersByHashrate(
+                            con, config.Id, from, 0, 15))
+                        .Select(mapper.Map<MinerPerformanceStats>)
+                        .ToArray();
+
+                    return result;
+                }).ToArray()
+            };
 
             await SendJson(context, response);
         }
-        private async Task HandleGetPoolAsync(HttpContext context, Match m)
+
+        private async Task GetPoolInfoAsync(HttpContext context, Match m)
         {
-            GetPoolResponse response;
             var pool = GetPool(context, m);
             if (pool == null)
                 return;
 
-            response = new GetPoolResponse()
+            // load stats
+            var stats = cf.Run(con => statsRepo.GetLastPoolStats(con, pool.Id));
+
+            var response = new GetPoolResponse
             {
-                Pool = pool.ToPoolInfo(mapper)
+                Pool = pool.ToPoolInfo(mapper, stats)
             };
-            
+
+            // enrich
+            response.Pool.TotalPaid = cf.Run(con => statsRepo.GetTotalPoolPayments(con, pool.Id));
+#if DEBUG
+            var from = new DateTime(2018, 1, 7, 16, 0, 0);
+#else
+            var from = clock.Now.AddDays(-1);
+#endif
+
+            response.Pool.TopMiners = cf.Run(con => statsRepo.PagePoolMinersByHashrate(
+                    con, pool.Id, from, 0, 15))
+                .Select(mapper.Map<MinerPerformanceStats>)
+                .ToArray();
+
             await SendJson(context, response);
         }
 
-        private async Task HandleGetPoolStatsAsync(HttpContext context, Match m)
+        private async Task GetPoolPerformanceAsync(HttpContext context, Match m)
         {
             var pool = GetPool(context, m);
             if (pool == null)
@@ -220,8 +285,8 @@ namespace MiningCore.Api
             var end = clock.Now;
             var start = end.AddDays(-1);
 
-            var stats = cf.Run(con => statsRepo.GetPoolStatsBetweenHourly(
-                con, pool.Config.Id, start, end));
+            var stats = cf.Run(con => statsRepo.GetPoolPerformanceBetweenHourly(
+                con, pool.Id, start, end));
 
             var response = new GetPoolStatsResponse
             {
@@ -231,7 +296,34 @@ namespace MiningCore.Api
             await SendJson(context, response);
         }
 
-        private async Task HandleGetBlocksPagedAsync(HttpContext context, Match m)
+        private async Task PagePoolMinersAsync(HttpContext context, Match m)
+        {
+            var pool = GetPool(context, m);
+            if (pool == null)
+                return;
+
+            // set range
+            var end = clock.Now;
+            var start = end.AddDays(-1);
+
+            var page = context.GetQueryParameter<int>("page", 0);
+            var pageSize = context.GetQueryParameter<int>("pageSize", 20);
+
+            if (pageSize == 0)
+            {
+                context.Response.StatusCode = 500;
+                return;
+            }
+
+            var miners = cf.Run(con => statsRepo.PagePoolMinersByHashrate(
+                    con, pool.Id, start, page, pageSize))
+                .Select(mapper.Map<MinerPerformanceStats>)
+                .ToArray();
+
+            await SendJson(context, miners);
+        }
+
+        private async Task PagePoolBlocksPagedAsync(HttpContext context, Match m)
         {
             var pool = GetPool(context, m);
             if (pool == null)
@@ -246,13 +338,13 @@ namespace MiningCore.Api
                 return;
             }
 
-            var blocks = cf.Run(con => blocksRepo.PageBlocks(con, pool.Config.Id,
-                    new[] { BlockStatus.Confirmed, BlockStatus.Pending }, page, pageSize))
+            var blocks = cf.Run(con => blocksRepo.PageBlocks(con, pool.Id,
+                    new[] { BlockStatus.Confirmed, BlockStatus.Pending, BlockStatus.Orphaned }, page, pageSize))
                 .Select(mapper.Map<Responses.Block>)
                 .ToArray();
 
             // enrich blocks
-            CoinMetaData.BlockInfoLinks.TryGetValue(pool.Config.Coin.Type, out var blockInfobaseDict);
+            CoinMetaData.BlockInfoLinks.TryGetValue(pool.Coin.Type, out var blockInfobaseDict);
 
             foreach(var block in blocks)
             {
@@ -269,7 +361,7 @@ namespace MiningCore.Api
             await SendJson(context, blocks);
         }
 
-        private async Task HandleGetPaymentsPagedAsync(HttpContext context, Match m)
+        private async Task PagePoolPaymentsAsync(HttpContext context, Match m)
         {
             var pool = GetPool(context, m);
             if (pool == null)
@@ -285,13 +377,13 @@ namespace MiningCore.Api
             }
 
             var payments = cf.Run(con => paymentsRepo.PagePayments(
-                    con, pool.Config.Id, page, pageSize))
+                    con, pool.Id, null, page, pageSize))
                 .Select(mapper.Map<Responses.Payment>)
                 .ToArray();
 
             // enrich payments
-            CoinMetaData.PaymentInfoLinks.TryGetValue(pool.Config.Coin.Type, out var txInfobaseUrl);
-            CoinMetaData.AddressInfoLinks.TryGetValue(pool.Config.Coin.Type, out var addressInfobaseUrl);
+            CoinMetaData.TxInfoLinks.TryGetValue(pool.Coin.Type, out var txInfobaseUrl);
+            CoinMetaData.AddressInfoLinks.TryGetValue(pool.Coin.Type, out var addressInfobaseUrl);
 
             foreach (var payment in payments)
             {
@@ -307,7 +399,7 @@ namespace MiningCore.Api
             await SendJson(context, payments);
         }
 
-        private async Task HandleGetMinerStatsAsync(HttpContext context, Match m)
+        private async Task GetMinerInfoAsync(HttpContext context, Match m)
         {
             var pool = GetPool(context, m);
             if (pool == null)
@@ -320,12 +412,14 @@ namespace MiningCore.Api
                 return;
             }
 
-            var statsResult = cf.Run(con => statsRepo.GetMinerStats(con, pool.Config.Id, address));
-            Responses.MinerStats stats = null;
+            var statsResult = cf.RunTx((con, tx) =>
+                statsRepo.GetMinerStats(con, tx, pool.Id, address), true, IsolationLevel.Serializable);
+
+            MinerStats stats = null;
 
             if (statsResult != null)
             {
-                stats = mapper.Map<Responses.MinerStats>(statsResult);
+                stats = mapper.Map<MinerStats>(statsResult);
 
                 // optional fields
                 if (statsResult.LastPayment != null)
@@ -334,12 +428,78 @@ namespace MiningCore.Api
                     stats.LastPayment = statsResult.LastPayment.Created;
 
                     // Compute info link
-                    if (CoinMetaData.PaymentInfoLinks.TryGetValue(pool.Config.Coin.Type, out var baseUrl))
+                    if (CoinMetaData.TxInfoLinks.TryGetValue(pool.Coin.Type, out var baseUrl))
                         stats.LastPaymentLink = string.Format(baseUrl, statsResult.LastPayment.TransactionConfirmationData);
                 }
+
+                stats.Performance24H = GetMinerPerformanceInternal("day", pool, address);
             }
 
             await SendJson(context, stats);
+        }
+
+        private async Task PageMinerPaymentsAsync(HttpContext context, Match m)
+        {
+            var pool = GetPool(context, m);
+            if (pool == null)
+                return;
+
+            var address = m.Groups["address"]?.Value;
+            if (string.IsNullOrEmpty(address))
+            {
+                context.Response.StatusCode = 404;
+                return;
+            }
+
+            var page = context.GetQueryParameter<int>("page", 0);
+            var pageSize = context.GetQueryParameter<int>("pageSize", 20);
+
+            if (pageSize == 0)
+            {
+                context.Response.StatusCode = 500;
+                return;
+            }
+
+            var payments = cf.Run(con => paymentsRepo.PagePayments(
+                    con, pool.Id, address, page, pageSize))
+                .Select(mapper.Map<Responses.Payment>)
+                .ToArray();
+
+            // enrich payments
+            CoinMetaData.TxInfoLinks.TryGetValue(pool.Coin.Type, out var txInfobaseUrl);
+            CoinMetaData.AddressInfoLinks.TryGetValue(pool.Coin.Type, out var addressInfobaseUrl);
+
+            foreach (var payment in payments)
+            {
+                // compute transaction infoLink
+                if (!string.IsNullOrEmpty(txInfobaseUrl))
+                    payment.TransactionInfoLink = string.Format(txInfobaseUrl, payment.TransactionConfirmationData);
+
+                // pool wallet link
+                if (!string.IsNullOrEmpty(addressInfobaseUrl))
+                    payment.AddressInfoLink = string.Format(addressInfobaseUrl, payment.Address);
+            }
+
+            await SendJson(context, payments);
+        }
+
+        private async Task GetMinerPerformanceAsync(HttpContext context, Match m)
+        {
+            var pool = GetPool(context, m);
+            if (pool == null)
+                return;
+
+            var address = m.Groups["address"]?.Value;
+            if (string.IsNullOrEmpty(address))
+            {
+                context.Response.StatusCode = 404;
+                return;
+            }
+
+            var mode = context.GetQueryParameter<string>("mode", "day").ToLower(); // "day" or "month"
+            var result = GetMinerPerformanceInternal(mode, pool, address);
+
+            await SendJson(context, result);
         }
 
         private async Task HandleForceGcAsync(HttpContext context, Match m)
@@ -360,11 +520,12 @@ namespace MiningCore.Api
             await SendJson(context, Program.gcStats);
         }
 
-        #region API-Surface
+#region API-Surface
 
         public void Start(ClusterConfig clusterConfig)
         {
             Contract.RequiresNonNull(clusterConfig, nameof(clusterConfig));
+            this.clusterConfig = clusterConfig;
 
             logger.Info(() => $"Launching ...");
 
@@ -384,15 +545,7 @@ namespace MiningCore.Api
             logger.Info(() => $"Online @ {address}:{port}");
         }
 
-        public void AttachPool(IMiningPool pool)
-        {
-            lock(pools)
-            {
-                pools.Add(pool);
-            }
-        }
+#endregion // API-Surface
 
-        #endregion // API-Surface
-        
     }
 }

@@ -19,18 +19,14 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reactive;
-using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
 using Autofac;
-using Autofac.Features.Metadata;
 using AutoMapper;
 using MiningCore.Blockchain.Monero.StratumRequests;
 using MiningCore.Blockchain.Monero.StratumResponses;
@@ -46,7 +42,7 @@ using Newtonsoft.Json;
 
 namespace MiningCore.Blockchain.Monero
 {
-    [CoinMetadata(CoinType.XMR, CoinType.AEON)]
+    [CoinMetadata(CoinType.XMR, CoinType.AEON, CoinType.ETN)]
     public class MoneroPool : PoolBase<MoneroShare>
     {
         public MoneroPool(IComponentContext ctx,
@@ -300,13 +296,20 @@ namespace MiningCore.Blockchain.Monero
 
             await manager.StartAsync();
 
-	        if (!poolConfig.ExternalStratum)
+            if (!poolConfig.ExternalStratum)
 	        {
 		        disposables.Add(manager.Blocks.Subscribe(_ => OnNewJob()));
 
 		        // we need work before opening the gates
 		        await manager.Blocks.Take(1).ToTask();
 	        }
+        }
+
+        protected override void InitStats()
+        {
+            base.InitStats();
+
+            blockchainStats = manager.BlockchainStats;
         }
 
         protected override WorkerContextBase CreateClientContext()
@@ -347,51 +350,10 @@ namespace MiningCore.Blockchain.Monero
             }
         }
 
-        protected override void SetupStats()
+        public override double HashrateFromShares(double shares, double interval)
         {
-            base.SetupStats();
-
-            // Pool Hashrate
-            var poolHashRateSampleIntervalSeconds = 60 * 10;
-
-            disposables.Add(Shares
-                .ObserveOn(ThreadPoolScheduler.Instance)
-                .Buffer(TimeSpan.FromSeconds(poolHashRateSampleIntervalSeconds))
-                .Do(shares => UpdateMinerHashrates(shares, poolHashRateSampleIntervalSeconds))
-                .Select(shares =>
-                {
-                    if (!shares.Any())
-                        return 0ul;
-
-                    try
-                    {
-                        return HashrateFromShares(shares, poolHashRateSampleIntervalSeconds);
-                    }
-
-                    catch(Exception ex)
-                    {
-                        logger.Error(ex);
-                        return 0ul;
-                    }
-                })
-                .Subscribe(hashRate => poolStats.PoolHashRate = hashRate));
-
-            // shares/sec
-            disposables.Add(Shares
-                .Buffer(TimeSpan.FromSeconds(1))
-                .Do(shares =>
-                {
-                    poolStats.ValidSharesPerSecond = shares.Count;
-
-                    logger.Debug(() => $"[{LogCat}] Share/sec = {poolStats.ValidSharesPerSecond}");
-                })
-                .Subscribe());
-        }
-
-        protected override ulong HashrateFromShares(IEnumerable<ClientShare> shares, int interval)
-        {
-            var result = Math.Ceiling(shares.Sum(share => share.Share.Difficulty) / interval);
-            return (ulong) result;
+            var result = shares / interval;
+            return result;
         }
 
         protected override void OnVarDiffUpdate(StratumClient client, double newDiff)
@@ -409,13 +371,6 @@ namespace MiningCore.Blockchain.Monero
                 var job = CreateWorkerJob(client);
                 client.Notify(MoneroStratumMethods.JobNotify, job);
             }
-        }
-
-        protected override async Task UpdateBlockChainStatsAsync()
-        {
-            await manager.UpdateNetworkStatsAsync();
-
-            blockchainStats = manager.BlockchainStats;
         }
 
         #endregion // Overrides
