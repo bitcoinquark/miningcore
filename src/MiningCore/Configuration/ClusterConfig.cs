@@ -51,11 +51,13 @@ namespace MiningCore.Configuration
         ELLA, // Ellaism
         AEON, // AEON
         STAK, // Straks
+        BTQ, // Bitcoin Quark
         ETN, // Electroneum
         MOON, // MoonCoin
         XVG,  // Verge
         GBX,  // GoByte
-        CRC,  // CrowdCoin   }
+        CRC,  // CrowdCoin   
+    }
 
     public class CoinConfig
     {
