@@ -64,6 +64,9 @@ namespace MiningCore
                 .ForMember(dest => dest.LastPaymentLink, opt => opt.Ignore());
 
             CreateMap<WorkerPerformanceStats, Api.Responses.WorkerPerformanceStats>();
+            CreateMap<WorkerPerformanceStats, Api.Responses.MinerPerformanceStats>()
+                .ForMember(dest => dest.MinerAddressInfoLink, opt => opt.Ignore());
+
             CreateMap<WorkerPerformanceStatsContainer, Api.Responses.WorkerPerformanceStatsContainer>();
 
             // PostgreSQL
@@ -72,6 +75,9 @@ namespace MiningCore
             CreateMap<Balance, Persistence.Postgres.Entities.Balance>();
             CreateMap<Payment, Persistence.Postgres.Entities.Payment>();
             CreateMap<PoolStats, Persistence.Postgres.Entities.PoolStats>();
+
+            CreateMap<MinerWorkerPerformanceStats, Api.Responses.MinerPerformanceStats>()
+                .ForMember(dest => dest.MinerAddressInfoLink, opt => opt.Ignore());
 
             CreateMap<MinerWorkerPerformanceStats, Persistence.Postgres.Entities.MinerWorkerPerformanceStats>()
                 .ForMember(dest => dest.Id, opt => opt.Ignore());
@@ -86,7 +92,9 @@ namespace MiningCore
             CreateMap<Persistence.Postgres.Entities.Payment, Payment>();
             CreateMap<Persistence.Postgres.Entities.PoolStats, PoolStats>();
             CreateMap<Persistence.Postgres.Entities.MinerWorkerPerformanceStats, MinerWorkerPerformanceStats>();
-            CreateMap<Persistence.Postgres.Entities.MinerWorkerPerformanceStats, Api.Responses.MinerPerformanceStats>();
+            CreateMap<Persistence.Postgres.Entities.MinerWorkerPerformanceStats, Api.Responses.MinerPerformanceStats>()
+                .ForMember(dest => dest.MinerAddressInfoLink, opt => opt.Ignore());
+            
 
             CreateMap<PoolStats, Mining.PoolStats>();
             CreateMap<BlockchainStats, Mining.PoolStats>();

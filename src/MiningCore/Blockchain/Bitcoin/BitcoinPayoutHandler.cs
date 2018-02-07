@@ -236,6 +236,12 @@ namespace MiningCore.Blockchain.Bitcoin
 
             object[] args;
 
+            String payFromAccount = string.Empty; // default account
+            if (!String.IsNullOrEmpty(poolConfig.PayFromAccount))
+            {
+                payFromAccount = poolConfig.PayFromAccount;
+            }
+
             if (extraPoolPaymentProcessingConfig?.MinersPayTxFees == true)
             {
                 var comment = (poolConfig.PoolName ?? clusterConfig.ClusterName ?? "MiningCore").Trim() + " Payment";
@@ -243,7 +249,7 @@ namespace MiningCore.Blockchain.Bitcoin
 
                 args = new object[]
                 {
-                    string.Empty,           // default account
+                    payFromAccount,         
                     amounts,                // addresses and associated amounts
                     1,                      // only spend funds covered by this many confirmations
                     comment,                // tx comment
@@ -255,7 +261,7 @@ namespace MiningCore.Blockchain.Bitcoin
             {
                 args = new object[]
                 {
-                    string.Empty,           // default account
+                    payFromAccount,           // default account
                     amounts,                // addresses and associated amounts
                 };
             }

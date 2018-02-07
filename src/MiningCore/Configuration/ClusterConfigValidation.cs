@@ -184,6 +184,10 @@ namespace MiningCore.Configuration
                 .NotEmpty()
                 .WithMessage("Pool: Wallet address missing or empty");
 
+            RuleFor(j => j.PayFromAccount)
+                .NotNull()
+                .WithMessage("Pool: Wallet pay from account missing");
+
             RuleFor(j => j.Daemons)
                 .NotNull()
                 .NotEmpty()

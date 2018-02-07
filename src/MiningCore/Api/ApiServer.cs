@@ -238,6 +238,8 @@ namespace MiningCore.Api
                         .Select(mapper.Map<MinerPerformanceStats>)
                         .ToArray();
 
+                    AddAddressInfo(config, result.TopMiners);
+
                     return result;
                 }).ToArray()
             };
@@ -271,6 +273,8 @@ namespace MiningCore.Api
                     con, pool.Id, from, 0, 15))
                 .Select(mapper.Map<MinerPerformanceStats>)
                 .ToArray();
+
+            AddAddressInfo(pool, response.Pool.TopMiners);
 
             await SendJson(context, response);
         }
@@ -320,7 +324,32 @@ namespace MiningCore.Api
                 .Select(mapper.Map<MinerPerformanceStats>)
                 .ToArray();
 
+            AddAddressInfo(pool, miners);
+
             await SendJson(context, miners);
+        }
+
+        private void AddAddressInfo(PoolConfig pool, MinerPerformanceStats[] miners)
+        {
+            if(pool == null || pool.Coin == null || miners == null)
+            {
+                return;
+            }
+            // pool wallet link
+            CoinMetaData.AddressInfoLinks.TryGetValue(pool.Coin.Type, out var addressInfobaseUrl);
+            if (string.IsNullOrEmpty(addressInfobaseUrl))
+                return;
+
+            foreach(MinerPerformanceStats miner in miners)
+            {
+                String minerAddress = miner.Miner;
+                int index = miner.Miner.IndexOf(".");
+                if (index >= 0)
+                {
+                    minerAddress = miner.Miner.Substring(0, index);
+                }
+                miner.MinerAddressInfoLink = string.Format(addressInfobaseUrl, minerAddress);
+            }
         }
 
         private async Task PagePoolBlocksPagedAsync(HttpContext context, Match m)
@@ -330,7 +359,7 @@ namespace MiningCore.Api
                 return;
 
             var page = context.GetQueryParameter<int>("page", 0);
-            var pageSize = context.GetQueryParameter<int>("pageSize", 20);
+            var pageSize = context.GetQueryParameter<int>("pageSize", 101);
 
             if (pageSize == 0)
             {

@@ -286,6 +286,9 @@ namespace MiningCore.Configuration
         public RewardRecipient[] RewardRecipients { get; set; }
         public SlackNotifications SlackNotifications { get; set; }
         public string Address { get; set; }
+
+        public string PayFromAccount { get; set; }
+
         public int ClientConnectionTimeout { get; set; }
         public int JobRebroadcastTimeout { get; set; }
         public int BlockRefreshInterval { get; set; }
