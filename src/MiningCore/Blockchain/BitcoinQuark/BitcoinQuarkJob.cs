@@ -13,6 +13,8 @@ using MiningCore.Util;
 using NBitcoin;
 using NBitcoin.DataEncoders;
 using Transaction = NBitcoin.Transaction;
+using System.Numerics;
+using System.Globalization;
 
 namespace MiningCore.Blockchain.BitcoinQuark
 {
@@ -168,7 +170,8 @@ namespace MiningCore.Blockchain.BitcoinQuark
 
             BlockTemplate = blockTemplate;
             JobId = jobId;
-            Difficulty = (double)new BigRational(ZCashConstants.Diff1b, BlockTemplate.Target.HexToByteArray().ToBigInteger());
+            
+            Difficulty = GetDifficulty(BlockTemplate.Target);
 
             this.isPoS = isPoS;
             this.shareMultiplier = shareMultiplier;
@@ -196,7 +199,7 @@ namespace MiningCore.Blockchain.BitcoinQuark
 
             // build tx hashes
             var txHashes = new List<uint256> { new uint256(coinbaseInitialHash) };
-            txHashes.AddRange(BlockTemplate.Transactions.Select(tx => new uint256(tx.Hash.HexToByteArray().ReverseArray())));
+            txHashes.AddRange(BlockTemplate.Transactions.Select(tx => new uint256(tx.TxId.HexToByteArray().ReverseArray())));
 
             // build merkle root
             merkleRoot = MerkleNode.GetRoot(txHashes).Hash.ToBytes().ReverseArray();
@@ -216,13 +219,36 @@ namespace MiningCore.Blockchain.BitcoinQuark
             };
         }
 
-        
-        public override object GetJobParams(bool isNew)
-        {
-            jobParams[jobParams.Length - 1] = true;
-            return jobParams;
-        }
 
+        protected double GetDifficulty(String starget)
+        {
+            NBitcoin.BouncyCastle.Math.BigInteger diff1b = new NBitcoin.BouncyCastle.Math.BigInteger(ZCashConstants.Diff1b.ToString());
+            NBitcoin.BouncyCastle.Math.BigInteger btarget = new NBitcoin.BouncyCastle.Math.BigInteger(starget.HexToByteArray());
+
+            Target targetDiff1b = new Target(diff1b);
+
+            var qr = diff1b.DivideAndRemainder(btarget);
+            var quotient = qr[0];
+            var remainder = qr[1];
+            var decimalPart = NBitcoin.BouncyCastle.Math.BigInteger.Zero;
+            for (int i = 0; i < 12; i++)
+            {
+                var div = (remainder.Multiply(NBitcoin.BouncyCastle.Math.BigInteger.Ten)).Divide(btarget);
+
+                decimalPart = decimalPart.Multiply(NBitcoin.BouncyCastle.Math.BigInteger.Ten);
+                decimalPart = decimalPart.Add(div);
+
+                remainder = remainder.Multiply(NBitcoin.BouncyCastle.Math.BigInteger.Ten).Subtract(div.Multiply(btarget));
+            }
+            double difficulty = double.Parse(quotient.ToString() + "." + decimalPart.ToString(), new NumberFormatInfo()
+            {
+                NegativeSign = "-",
+                NumberDecimalSeparator = "."
+            });
+
+            return difficulty;
+        }
+        
         #endregion
     }
 }
