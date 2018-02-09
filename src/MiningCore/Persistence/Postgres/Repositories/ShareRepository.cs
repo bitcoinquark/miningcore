@@ -131,9 +131,38 @@ namespace MiningCore.Persistence.Postgres.Repositories
         {
             logger.LogInvoke(new[] { poolId });
 
-            var query = "SELECT SUM(difficulty) FROM shares WHERE poolid = @poolId AND created > @start AND created < @end";
+            var query = "SELECT SUM(difficulty) as difficulty FROM shares WHERE poolid = @poolId AND created > @start AND created < @end";
 
-            return con.QuerySingle<ulong?>(query, new { poolId, start, end });
+            IDbCommand cmd = con.CreateCommand();
+            cmd.CommandText = query;
+            IDataParameter param = null;
+            param = cmd.CreateParameter();
+            param.ParameterName = "@poolId";
+            param.DbType = DbType.String;
+            param.Value = poolId;
+            cmd.Parameters.Add(param);
+
+            param = cmd.CreateParameter();
+            param.ParameterName = "@start";
+            param.DbType = DbType.DateTime;
+            param.Value = start;
+            cmd.Parameters.Add(param);
+
+            param = cmd.CreateParameter();
+            param.ParameterName = "@end";
+            param.DbType = DbType.DateTime;
+            param.Value = end;
+            cmd.Parameters.Add(param);
+
+            object result = (object)cmd.ExecuteScalar();
+
+            if (result == DBNull.Value)
+            {
+                return null;
+            }
+            decimal value = new decimal((double)result);
+            return Convert.ToUInt64(value);
+
         }
 
         public MinerWorkerHashes[] GetHashAccumulationBetweenCreated(IDbConnection con, string poolId, DateTime start, DateTime end)
