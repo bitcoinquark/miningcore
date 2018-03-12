@@ -499,7 +499,8 @@ namespace MiningCore.Blockchain.Bitcoin
                 new DaemonCmd(BitcoinCommands.ValidateAddress, new[] { poolConfig.Address }),
                 new DaemonCmd(BitcoinCommands.GetDifficulty),
                 new DaemonCmd(BitcoinCommands.SubmitBlock),
-                new DaemonCmd(BitcoinCommands.GetBlockchainInfo)
+                new DaemonCmd(BitcoinCommands.GetBlockchainInfo),
+                new DaemonCmd(BitcoinCommands.GetAddressInfo, new[] { poolConfig.Address })
             };
 
             var results = await daemon.ExecuteBatchAnyAsync(commands);
@@ -519,12 +520,13 @@ namespace MiningCore.Blockchain.Bitcoin
             var difficultyResponse = results[1].Response.ToObject<JToken>();
             var submitBlockResponse = results[2];
             var blockchainInfoResponse = results[3].Response.ToObject<BlockchainInfo>();
+            var getAddressInfoResponse = results[4].Response.ToObject<GetAddressInfoResponse>();
 
             // ensure pool owns wallet
             if (!validateAddressResponse.IsValid)
                 logger.ThrowLogPoolStartupException($"Daemon reports pool-address '{poolConfig.Address}' as invalid", LogCat);
 
-            if (!validateAddressResponse.IsMine)
+            if (!getAddressInfoResponse.IsMine)
                 logger.ThrowLogPoolStartupException($"Daemon does not own pool-address '{poolConfig.Address}'", LogCat);
 
             isPoS = difficultyResponse.Values().Any(x => x.Path == "proof-of-stake");
