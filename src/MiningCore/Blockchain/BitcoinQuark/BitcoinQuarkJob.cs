@@ -44,14 +44,34 @@ namespace MiningCore.Blockchain.BitcoinQuark
 
         protected virtual Script GetPremineAddressScript(uint height)
         {
-            bool BTQPremineEnforceWhitelist = true;
-            uint BTQHeight = 1259790;
-            uint BTQPremineWindow = 100;
-            uint nPowTargetSpacing = 10 * 60;
-
-            if(this.networkType != BitcoinNetworkType.Test)
+            bool BTQPremineEnforceWhitelist = false;
+            uint BTQHeight = 520520;
+            List<String[]> vPreminePubkeyList = new List<String[]>();
+            if (this.networkType == BitcoinNetworkType.Main)
             {
-                return null;
+                BTQPremineEnforceWhitelist = true;
+                BTQHeight = 520520;
+                String[] vPreminePubkeys1 = { "021dd3be6338f1842d1cf52bbcd3d408b4900ff3ecbdda77a7c19b955fcb7dd816", "03541b002b6e5c7eac7e22172475342c1095c8c012079d660ece960a13466be04e", "023372d26eb06f1c22aec0bef30f01020e911c7bf9dfcd1da59a81580de21d467b" };
+                String[] vPreminePubkeys2 = { "02f4c682565b2c51e2850207b22ac068dac25b05e9efc903f272fcd68185961654", "02313c58f1c92d088f09a3c80169c56eab18e3b72e33d3400577374cc6c92f9c66", "029c25ddabd0c8d696f4e1484d5e25e7b4de902e36eb8178e86854cbd4edecc62b" };
+                String[] vPreminePubkeys3 = { "034fa410a78864f0eb833685b9b549828f2457d48998a7dd6fcdc53c427ebae1ad", "037bd10863da072ec79a6af3de728e214107b43a4b4e11e823d30353e560e3abb7", "03a4fff6237b4429e15903625afcba1cf8d0388e44730e7c7de309345b3ecf3c0f" };
+                String[] vPreminePubkeys4 = { "0368d47a3cc473685a4326820172df3ee9815303ae8508770ce8b98bf79880d6c8", "034d7ff8e71c45a9ad7d63cece2aef69b17d417a058acde9a0b74fd65e27fc6c14", "026ef51ad3da23632a8a7a7fba27fde1298bc92bf2bb6f48385270d9ea0ef6f706" };
+                vPreminePubkeyList.Add(vPreminePubkeys1);
+                vPreminePubkeyList.Add(vPreminePubkeys2);
+                vPreminePubkeyList.Add(vPreminePubkeys3);
+                vPreminePubkeyList.Add(vPreminePubkeys4);
+            }
+            else if (this.networkType == BitcoinNetworkType.Test)
+            {
+                BTQPremineEnforceWhitelist = true;
+                BTQHeight = 1259790;
+                String[] vPreminePubkeys1 = { "0330ac64a02530018aee75282511ab03ad14afded0de3a7631f859fcc95e7053f5", "02b1dd3a3d48bae5e8372e896c12fcf1a6a472df03a4e279f1228ea43eb72d7a76", "029afac47580783cd5e0fb7b9ef5eb70302e153c02b3880f254eed34e636228fb1" };
+                String[] vPreminePubkeys2 = { "03408adf7846c306e9bb70b4943a28605195a7baf8f25aabd0d9cad703533ad154", "03e8b65f7dddd6747598747dba29f66874456e0182b6c4afaf92b01cf1c97ed333", "03b318bfec48b38094f5825b6d60d325df13386cb00742bf8e2b7798c7e19f5616" };
+                String[] vPreminePubkeys3 = { "0330ac64a02530018aee75282511ab03ad14afded0de3a7631f859fcc95e7053f5", "02b1dd3a3d48bae5e8372e896c12fcf1a6a472df03a4e279f1228ea43eb72d7a76", "029afac47580783cd5e0fb7b9ef5eb70302e153c02b3880f254eed34e636228fb1" };
+                String[] vPreminePubkeys4 = { "03408adf7846c306e9bb70b4943a28605195a7baf8f25aabd0d9cad703533ad154", "03e8b65f7dddd6747598747dba29f66874456e0182b6c4afaf92b01cf1c97ed333", "03b318bfec48b38094f5825b6d60d325df13386cb00742bf8e2b7798c7e19f5616" };
+                vPreminePubkeyList.Add(vPreminePubkeys1);
+                vPreminePubkeyList.Add(vPreminePubkeys2);
+                vPreminePubkeyList.Add(vPreminePubkeys3);
+                vPreminePubkeyList.Add(vPreminePubkeys4);
             }
 
             if (!BTQPremineEnforceWhitelist)
@@ -59,20 +79,15 @@ namespace MiningCore.Blockchain.BitcoinQuark
                 return null;
             }
 
+            String[][] vPreminePubkeys = vPreminePubkeyList.ToArray();
+
+            uint BTQPremineWindow = 100;
+            uint nPowTargetSpacing = 10 * 60;
+
             if (!(BTQHeight <= height && height < (BTQHeight + BTQPremineWindow)))
             {
                 return null;
             }
-
-            String[] vPreminePubkeys1 = { "0330ac64a02530018aee75282511ab03ad14afded0de3a7631f859fcc95e7053f5", "02b1dd3a3d48bae5e8372e896c12fcf1a6a472df03a4e279f1228ea43eb72d7a76", "029afac47580783cd5e0fb7b9ef5eb70302e153c02b3880f254eed34e636228fb1" };
-            String[] vPreminePubkeys2 = { "03408adf7846c306e9bb70b4943a28605195a7baf8f25aabd0d9cad703533ad154", "03e8b65f7dddd6747598747dba29f66874456e0182b6c4afaf92b01cf1c97ed333", "03b318bfec48b38094f5825b6d60d325df13386cb00742bf8e2b7798c7e19f5616" };
-            String[] vPreminePubkeys3 = { "0330ac64a02530018aee75282511ab03ad14afded0de3a7631f859fcc95e7053f5", "02b1dd3a3d48bae5e8372e896c12fcf1a6a472df03a4e279f1228ea43eb72d7a76", "029afac47580783cd5e0fb7b9ef5eb70302e153c02b3880f254eed34e636228fb1" };
-            String[] vPreminePubkeys4 = { "03408adf7846c306e9bb70b4943a28605195a7baf8f25aabd0d9cad703533ad154", "03e8b65f7dddd6747598747dba29f66874456e0182b6c4afaf92b01cf1c97ed333", "03b318bfec48b38094f5825b6d60d325df13386cb00742bf8e2b7798c7e19f5616" };
-
-            String[][] vPreminePubkeys =
-            {
-                vPreminePubkeys1, vPreminePubkeys2, vPreminePubkeys3, vPreminePubkeys4
-            };
 
             uint LOCK_STAGES = 18;  // 18 months
             uint LOCK_TIME = LOCK_STAGES * 30 * 24 * 3600;  // 18 months
